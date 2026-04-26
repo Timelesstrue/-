@@ -1,0 +1,215 @@
+--// Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local lp = Players.LocalPlayer
+
+--// State
+local autoEquip = false
+
+--// UI
+local gui = Instance.new("ScreenGui")
+gui.Parent = lp:WaitForChild("PlayerGui")
+gui.ResetOnSpawn = false
+
+-- OUTER
+local outer = Instance.new("Frame")
+outer.Parent = gui
+outer.Size = UDim2.new(0, 130, 0, 40)
+outer.Position = UDim2.new(0.5, 0, 0.7, 0)
+outer.AnchorPoint = Vector2.new(0.5, 0.5)
+outer.BorderSizePixel = 0
+
+local outerCorner = Instance.new("UICorner", outer)
+outerCorner.CornerRadius = UDim.new(0, 12)
+
+-- BUTTON
+local button = Instance.new("TextButton")
+button.Parent = outer
+button.Size = UDim2.new(1, -4, 1, -4)
+button.Position = UDim2.new(0, 2, 0, 2)
+button.BackgroundColor3 = Color3.fromRGB(25,25,25)
+button.TextColor3 = Color3.new(1,1,1)
+button.TextScaled = true
+button.Text = "Auto Equip: OFF"
+button.BorderSizePixel = 0
+
+local innerCorner = Instance.new("UICorner", button)
+innerCorner.CornerRadius = UDim.new(0, 10)
+
+-- SCALE EFFECT
+local originalSize = button.Size
+local holdSize = UDim2.new(originalSize.X.Scale, originalSize.X.Offset - 4,
+                           originalSize.Y.Scale, originalSize.Y.Offset - 4)
+
+local function pressEffect()
+    TweenService:Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {
+        Size = holdSize,
+        BackgroundColor3 = Color3.fromRGB(15,15,15)
+    }):Play()
+end
+
+local function releaseEffect()
+    TweenService:Create(button, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
+        Size = originalSize,
+        BackgroundColor3 = Color3.fromRGB(25,25,25)
+    }):Play()
+end
+
+-- SOUND spawn
+local spawnSound = Instance.new("Sound")
+spawnSound.SoundId = "rbxassetid://140403952687817"
+spawnSound.Volume = 1
+spawnSound.Parent = gui
+
+task.delay(0.1, function()
+    spawnSound:Play()
+end)
+
+-- SOUND click + hold
+local holdSound = Instance.new("Sound")
+holdSound.SoundId = "rbxassetid://6856723345"
+holdSound.Volume = 1
+holdSound.Parent = button
+
+-- HOLD + CLICK
+local holdStart = 0
+local HOLD_THRESHOLD = 0.25
+local isHolding = false
+
+button.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 
+    or input.UserInputType == Enum.UserInputType.Touch then
+        
+        holdStart = tick()
+        isHolding = true
+
+        pressEffect()
+
+        task.delay(HOLD_THRESHOLD, function()
+            if isHolding then
+                holdSound:Play()
+            end
+        end)
+    end
+end)
+
+button.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 
+    or input.UserInputType == Enum.UserInputType.Touch then
+        
+        local duration = tick() - holdStart
+        isHolding = false
+
+        releaseEffect()
+
+        if duration < HOLD_THRESHOLD then
+            holdSound:Play()
+            autoEquip = not autoEquip
+            button.Text = autoEquip and "Auto Equip: ON" or "Auto Equip: OFF"
+        end
+    end
+end)
+
+-- DRAG
+local dragging = false
+local dragStart
+local startPos
+
+local function clampPosition(pos)
+    local screenSize = workspace.CurrentCamera.ViewportSize
+    local size = outer.AbsoluteSize
+
+    local x = math.clamp(pos.X.Offset, size.X/2, screenSize.X - size.X/2)
+    local y = math.clamp(pos.Y.Offset, size.Y/2, screenSize.Y - size.Y/2)
+
+    return UDim2.new(0, x, 0, y)
+end
+
+local function update(input)
+    local delta = input.Position - dragStart
+    local newPos = UDim2.new(
+        0,
+        startPos.X.Offset + delta.X,
+        0,
+        startPos.Y.Offset + delta.Y
+    )
+    outer.Position = clampPosition(newPos)
+end
+
+outer.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = outer.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+outer.InputChanged:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseMovement 
+    or input.UserInputType == Enum.UserInputType.Touch) and dragging then
+        update(input)
+    end
+end)
+
+-- RGB viền
+local t = 0
+RunService.RenderStepped:Connect(function(dt)
+    t += dt * 2
+    local alpha = (math.sin(t) + 1) / 2
+
+    local darkBlue = Color3.fromRGB(0, 80, 255)
+    local lightBlue = Color3.fromRGB(0, 255, 255)
+
+    outer.BackgroundColor3 = darkBlue:Lerp(lightBlue, alpha)
+end)
+
+-- EQUIP
+local function equipAllTools()
+    local char = lp.Character
+    if not char then return end
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    for _, tool in pairs(lp.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            pcall(function()
+                hum:EquipTool(tool)
+            end)
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if autoEquip then
+            equipAllTools()
+        end
+    end
+end)
+
+lp.Backpack.ChildAdded:Connect(function()
+    if autoEquip then
+        task.wait(0.1)
+        equipAllTools()
+    end
+end)
+
+lp.CharacterAdded:Connect(function(char)
+    if autoEquip then
+        repeat task.wait() until char:FindFirstChildOfClass("Humanoid")
+        task.wait(0.2)
+        equipAllTools()
+    end
+end)

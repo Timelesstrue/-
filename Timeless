@@ -1,0 +1,108 @@
+if not game:IsLoaded() then game.Loaded:Wait() end 
+
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/main.lua"))()
+
+local Window = Window or WindUI:CreateWindow({
+    Title = "Crazy Skeleton Rng",
+    Author = "timelesstrue",
+    Icon = "Crown",
+    Size = UDim2.fromOffset(550, 380)
+})
+WindUI:SetTheme("Light")
+
+getgenv().Auto_Farm_Entities = false
+
+local function isAlive(model)
+    if not model or not model.Parent then return false end
+    
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        return humanoid.Health > 0
+    end
+    
+    local clickHitbox = model:FindFirstChild("ClickHitbox") or model:FindFirstChildWhichIsA("BasePart")
+    if clickHitbox and clickHitbox.Transparency == 1 then
+        return false
+    end
+    
+    return true
+end
+
+local function startAutoFarm()
+    local player = game.Players.LocalPlayer
+    
+    while getgenv().Auto_Farm_Entities do
+        task.wait(0.1)
+        
+        local container = workspace:FindFirstChild("Entities") or workspace:FindFirstChild("entities") or workspace:FindFirstChild("Sanses")
+        
+        if container then
+            for _, model in pairs(container:GetChildren()) do
+                if not getgenv().Auto_Farm_Entities then break end
+                
+                local targetPart = model:FindFirstChild("ClickHitbox") or model:FindFirstChildWhichIsA("BasePart", true)
+                
+                if targetPart and isAlive(model) then
+                    local character = player.Character
+                    if character and character:FindFirstChild("HumanoidRootPart") then
+                        local rootPart = character.HumanoidRootPart
+                        
+                      
+                        rootPart.CFrame = targetPart.CFrame * CFrame.new(0, 1, 3)
+                        task.wait(0.05)
+                        
+                        
+                        while getgenv().Auto_Farm_Entities and isAlive(model) and targetPart.Parent do
+                            rootPart.CFrame = CFrame.new(rootPart.Position, targetPart.Position)
+                            
+                            local clickDetector = model:FindFirstChildOfClass("ClickDetector") 
+                                or targetPart:FindFirstChildOfClass("ClickDetector") 
+                                or model:FindFirstChildWhichIsA("ClickDetector", true)
+                                
+                            if clickDetector then
+                                fireclickdetector(clickDetector)
+                            end
+                            
+                            task.wait(0.02)
+                        end
+                    end
+                    task.wait(0.05)
+                end
+            end
+        end
+    end
+end
+
+
+local MainTab = Window:CreateTab({
+    Name = "Main Farm",
+    Icon = "rbxassetid://7734068321"
+})
+
+MainTab:CreateSection("Auto Farm")
+
+MainTab:CreateToggle({
+    Title = "Auto TP & Click Entities (Smooth)",
+    Desc = "Tự động dịch chuyển và click quái siêu mượt",
+    Value = false,
+    Callback = function(Value)
+        getgenv().Auto_Farm_Entities = Value
+        if Value then
+            task.spawn(startAutoFarm)
+        end
+    end,
+})
+
+MainTab:CreateSection("Other")
+
+MainTab:CreateButton({
+    Title = "Remove Texture (Giảm lag)",
+    Desc = "Chuyển mọi bề mặt thành Smooth Plastic",
+    Callback = function()
+        for i,v in next,(workspace:GetDescendants()) do
+            if v:IsA("Part") then
+                v.Material = Enum.Material.SmoothPlastic
+            end
+        end
+    end,
+})

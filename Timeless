@@ -1,17 +1,20 @@
 if not game:IsLoaded() then game.Loaded:Wait() end 
 
-local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/main.lua"))()
+--// Khởi tạo WindUI với link mới của bro
+local WindUI = loadstring(game:HttpGet('https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main_example.lua'))()
 
-local Window = Window or WindUI:CreateWindow({
-    Title = "Crazy Skeleton Rng",
-    Author = "timelesstrue",
-    Icon = "Crown",
-    Size = UDim2.fromOffset(550, 380)
+local Window = WindUI:CreateWindow({
+    Title = "Crazy Skeleton Rng", 
+    Author = "timelesstrue",      
+    Icon = "Crown",               
+    Size = UDim2.fromOffset(520, 350)
 })
-WindUI:SetTheme("Light")
+WindUI:SetTheme("Light") 
 
+-- Biến cấu hình Global
 getgenv().Auto_Farm_Entities = false
 
+-- Hàm kiểm tra thực thể còn tồn tại/còn sống không
 local function isAlive(model)
     if not model or not model.Parent then return false end
     
@@ -28,6 +31,7 @@ local function isAlive(model)
     return true
 end
 
+-- Hàm xử lý Auto Farm
 local function startAutoFarm()
     local player = game.Players.LocalPlayer
     
@@ -47,11 +51,11 @@ local function startAutoFarm()
                     if character and character:FindFirstChild("HumanoidRootPart") then
                         local rootPart = character.HumanoidRootPart
                         
-                      
+                        -- [CẢI TIẾN] CHỈ TP ĐÚNG 1 LẦN DUY NHẤT ĐẾN CON QUÁI
                         rootPart.CFrame = targetPart.CFrame * CFrame.new(0, 1, 3)
                         task.wait(0.05)
                         
-                        
+                        -- Vòng lặp khóa mục tiêu và click
                         while getgenv().Auto_Farm_Entities and isAlive(model) and targetPart.Parent do
                             rootPart.CFrame = CFrame.new(rootPart.Position, targetPart.Position)
                             
@@ -73,15 +77,17 @@ local function startAutoFarm()
     end
 end
 
-
-local MainTab = Window:CreateTab({
-    Name = "Main Farm",
+----------------------------------------------------
+-- Tạo Tab Autofarm
+local AutofarmTab = Window:CreateTab({
+    Name = "Autofarm",
     Icon = "rbxassetid://7734068321"
 })
 
-MainTab:CreateSection("Auto Farm")
+AutofarmTab:CreateSection("Autofarm")
 
-MainTab:CreateToggle({
+-- Toggle bật/tắt Auto Farm
+AutofarmTab:CreateToggle({
     Title = "Auto TP & Click Entities (Smooth)",
     Desc = "Tự động dịch chuyển và click quái siêu mượt",
     Value = false,
@@ -93,9 +99,10 @@ MainTab:CreateToggle({
     end,
 })
 
-MainTab:CreateSection("Other")
+AutofarmTab:CreateSection("Other")
 
-MainTab:CreateButton({
+-- Button giảm lag
+AutofarmTab:CreateButton({
     Title = "Remove Texture (Giảm lag)",
     Desc = "Chuyển mọi bề mặt thành Smooth Plastic",
     Callback = function()
@@ -106,3 +113,4 @@ MainTab:CreateButton({
         end
     end,
 })
+

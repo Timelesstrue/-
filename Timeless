@@ -6,7 +6,7 @@ local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/rel
 local Window = WindUI:CreateWindow({
     Title = "Crazy Skeleton Rng", 
     Author = "timelesstrue",      
-    Icon = "Crown",               
+    Icon = "<Crown />",               
     Size = UDim2.fromOffset(520, 350)
 })
 WindUI:SetTheme("Light") 

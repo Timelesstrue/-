@@ -1,115 +1,732 @@
-if not game:IsLoaded() then game.Loaded:Wait() end 
-
---// Khởi tạo WindUI với link Release chính thức
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-
-local Window = WindUI:CreateWindow({
-    Title = "Crazy Skeleton Rng", 
-    Author = "timelesstrue",      
-    Icon = "<Crown />",               
-    Size = UDim2.fromOffset(520, 350)
-})
-WindUI:SetTheme("Light") 
-
--- Biến cấu hình Global
-getgenv().Auto_Farm_Entities = false
-
--- Hàm kiểm tra thực thể còn tồn tại/còn sống không
-local function isAlive(model)
-    if not model or not model.Parent then return false end
-    
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        return humanoid.Health > 0
-    end
-    
-    local clickHitbox = model:FindFirstChild("ClickHitbox") or model:FindFirstChildWhichIsA("BasePart")
-    if clickHitbox and clickHitbox.Transparency == 1 then
-        return false
-    end
-    
-    return true
+-- infectious smile
+-- Quick anti-cheat removal at start
+if workspace.Map:FindFirstChild("AntiHack") then
+    workspace.Map.AntiHack:Destroy()
 end
 
--- Hàm xử lý Auto Farm
-local function startAutoFarm()
-    local player = game.Players.LocalPlayer
-    
-    while getgenv().Auto_Farm_Entities do
-        task.wait(0.1)
+local plr = game.Players.LocalPlayer
+if plr.Character then
+    if plr.Character:FindFirstChild("StayOnPart") then plr.Character.StayOnPart:Destroy() end
+    if plr.Character:FindFirstChild("HumanoidInit") then plr.Character.HumanoidInit:Destroy() end
+end
+
+-- Network logic
+coroutine.wrap(function()
+    getgenv().isNetworkOwner = newcclosure(function(part)
+        return not part.Anchored and part.ReceiveAge == 0 and gethiddenproperty(part, "NetworkIsSleeping") == false
+    end)
+
+    getgenv().setSimulationRadius = newcclosure(function(minr, maxr)
+        sethiddenproperty(plr, "SimulationRadius", minr or 1e9)
+        sethiddenproperty(plr, "MaxSimulationRadius", maxr or 1e9)
+        sethiddenproperty(plr, "MaximumSimulationRadius", maxr or 1e9)
+    end)
+end)()
+
+-- Helper to get all tools (char + backpack)
+local function getAllTools()
+    local tools = {}
+    if plr.Character then
+        for _, item in plr.Character:GetChildren() do
+            if item:IsA("Tool") then table.insert(tools, item) end
+        end
+    end
+    for _, item in plr.Backpack:GetChildren() do
+        if item:IsA("Tool") then table.insert(tools, item) end
+    end
+    return tools
+end
+
+-- Biến lưu kích thước Reach hiện tại để tự áp dụng khi hồi sinh và quét Hitbox
+local savedReachSize = 0
+local savedInfectReach = 0
+
+-- Hàm áp dụng Reach và hiệu ứng Highlight cho vũ khí Human
+local function applyReachToTool(tool, size)
+    if size <= 0 then return end
+    for _, part in tool:GetDescendants() do
+        if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") then
+            part.Size = Vector3.new(size, size, size)
+            part.Transparency = 0.8 
+            part.Massless = true
+            
+            if part:FindFirstChildOfClass("Highlight") then
+                part:FindFirstChildOfClass("Highlight"):Destroy()
+            end
+            
+            local highlight = Instance.new("Highlight", part)
+            highlight.Adornee = part
+            highlight.FillColor = Color3.fromRGB(0, 255, 255) 
+            highlight.FillTransparency = 0.8
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.OutlineTransparency = 0.2
+        end
+    end
+end
+
+-- Hàm áp dụng Infect Reach khối hộp 3D cho Infected
+local function applyInfectReach(n)
+    if n <= 0 then return end
+    local torso = plr.Character and plr.Character:FindFirstChild("Torso")
+    if torso and torso:FindFirstChild("Part") then
+        local p = torso.Part
+        -- Tăng tầm vật lý ngầm
+        p.Size = Vector3.new(7, 2, n)
+        p.Massless = true
+        p.Transparency = 1 
         
-        local container = workspace:FindFirstChild("Entities") or workspace:FindFirstChild("entities") or workspace:FindFirstChild("Sanses")
+        -- Tạo khối hiển thị 3D sắc nét phía trước mặt
+        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            if hrp:FindFirstChild("BeautifulInfectVisual") then
+                hrp.BeautifulInfectVisual:Destroy()
+            end
+            
+            local container = Instance.new("Folder")
+            container.Name = "BeautifulInfectVisual"
+            container.Parent = hrp
+            
+            -- ĐÃ SỬA: Tạo khối hộp đặc 3D thay vì tấm phẳng 2D
+            local box = Instance.new("BoxHandleAdornment")
+            box.Name = "VisualBox"
+            box.Size = Vector3.new(7, 7, n) -- Chiều dài khối Z phủ hết tầm đánh n
+            box.CFrame = CFrame.new(0, 0, -(n/2)) -- Căn tâm khối nằm chính giữa tầm đánh phía trước
+            box.AlwaysOnTop = true
+            box.ZIndex = 10
+            box.Adornee = hrp
+            box.Color3 = Color3.fromRGB(255, 40, 40) 
+            box.Transparency = 0.85 -- Mờ nhẹ dễ nhìn xuyên qua
+            box.Parent = container
+            
+            -- Khung viền 3D bao quanh khối hộp
+            local border = Instance.new("SelectionBox")
+            border.Name = "VisualBorder"
+            border.Color3 = Color3.fromRGB(255, 40, 40)
+            border.LineThickness = 0.03
+            border.Adornee = box
+            border.Parent = container
+        end
+    end
+end
+
+--------------------------------------------------------------------
+-- HỆ THỐNG HIGHLIGHT ENEMY TRONG HITBOX
+--------------------------------------------------------------------
+local function applyTargetHighlight(char)
+    if not char:FindFirstChild("HitboxHighlight") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "HitboxHighlight"
+        hl.FillColor = Color3.fromRGB(255, 0, 0) 
+        hl.FillTransparency = 0.5
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.OutlineTransparency = 0
+        hl.Adornee = char
+        hl.Parent = char
+    end
+end
+
+local function removeTargetHighlight(char)
+    local hl = char:FindFirstChild("HitboxHighlight")
+    if hl then hl:Destroy() end
+end
+
+task.spawn(function()
+    while task.wait(0.1) do
+        local myChar = plr.Character
+        local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
         
-        if container then
-            for _, model in pairs(container:GetChildren()) do
-                if not getgenv().Auto_Farm_Entities then break end
-                
-                local targetPart = model:FindFirstChild("ClickHitbox") or model:FindFirstChildWhichIsA("BasePart", true)
-                
-                if targetPart and isAlive(model) then
-                    local character = player.Character
-                    if character and character:FindFirstChild("HumanoidRootPart") then
-                        local rootPart = character.HumanoidRootPart
-                        
-                        -- [CẢI TIẾN] CHỈ TP ĐÚNG 1 LẦN DUY NHẤT ĐẾN CON QUÁI
-                        rootPart.CFrame = targetPart.CFrame * CFrame.new(0, 1, 3)
-                        task.wait(0.05)
-                        
-                        -- Vòng lặp khóa mục tiêu và click
-                        while getgenv().Auto_Farm_Entities and isAlive(model) and targetPart.Parent do
-                            rootPart.CFrame = CFrame.new(rootPart.Position, targetPart.Position)
-                            
-                            local clickDetector = model:FindFirstChildOfClass("ClickDetector") 
-                                or targetPart:FindFirstChildOfClass("ClickDetector") 
-                                or model:FindFirstChildWhichIsA("ClickDetector", true)
-                                
-                            if clickDetector then
-                                fireclickdetector(clickDetector)
+        if myHrp then
+            local isInfectedMode = (savedInfectReach > 0) and (myChar:FindFirstChild("Torso") and myChar.Torso:FindFirstChild("Part"))
+
+            for _, targetPlr in game.Players:GetPlayers() do
+                if targetPlr ~= plr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetChar = targetPlr.Character
+                    local targetHrp = targetChar.HumanoidRootPart
+                    local inHitbox = false
+
+                    if isInfectedMode then
+                        -- Quét vùng hình hộp chữ nhật trước mặt (Infected)
+                        local relativePos = myHrp.CFrame:PointToObjectSpace(targetHrp.Position)
+                        if math.abs(relativePos.X) <= 3.5 and math.abs(relativePos.Y) <= 3.5 and (relativePos.Z <= 0 and relativePos.Z >= -savedInfectReach) then
+                            inHitbox = true
+                        end
+                    else
+                        -- Quét vùng hình cầu xung quanh (Human Weapon Reach)
+                        if savedReachSize > 0 then
+                            local distance = (myHrp.Position - targetHrp.Position).Magnitude
+                            if distance <= (savedReachSize / 2) then
+                                inHitbox = true
                             end
-                            
-                            task.wait(0.02)
                         end
                     end
-                    task.wait(0.05)
+
+                    if inHitbox then
+                        applyTargetHighlight(targetChar)
+                    else
+                        removeTargetHighlight(targetChar)
+                    end
                 end
             end
         end
     end
-end
+end)
+--------------------------------------------------------------------
 
-----------------------------------------------------
--- Tạo Tab Autofarm
-local AutofarmTab = Window:CreateTab({
-    Name = "Autofarm",
-    Icon = "rbxassetid://7734068321"
+-- Load Wind UI
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "SHOREKEEPER",
+    Icon = "crown",
+    Theme = "Sky",
+    Background = "rbxassetid://108372721023463",
+    OpenButton = {
+        Title = "SHOREKEEPER",
+        CornerRadius = UDim.new(1, 0),
+        StrokeThickness = 3,
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = false,
+        Scale = 0.5,
+        Color = ColorSequence.new(
+            Color3.fromHex("#30FF6A"),
+            Color3.fromHex("#e7ff2f")
+        )
+    }
 })
 
-AutofarmTab:CreateSection("Autofarm")
+print("sub to yua")
 
--- Toggle bật/tắt Auto Farm
-AutofarmTab:CreateToggle({
-    Title = "Auto TP & Click Entities (Smooth)",
-    Desc = "Tự động dịch chuyển và click quái siêu mượt",
-    Value = false,
-    Callback = function(Value)
-        getgenv().Auto_Farm_Entities = Value
-        if Value then
-            task.spawn(startAutoFarm)
-        end
-    end,
-})
+--------------------------------------------------------------------
+-- HUMAN TAB
+--------------------------------------------------------------------
+local Human = Window:Tab({ Title = "Human", Icon = "user" })
 
-AutofarmTab:CreateSection("Other")
-
--- Button giảm lag
-AutofarmTab:CreateButton({
-    Title = "Remove Texture (Giảm lag)",
-    Desc = "Chuyển mọi bề mặt thành Smooth Plastic",
-    Callback = function()
-        for i,v in next,(workspace:GetDescendants()) do
-            if v:IsA("Part") then
-                v.Material = Enum.Material.SmoothPlastic
+Human:Dropdown({
+    Title = "Instant Cooldown - Pick Weapon",
+    Values = {"Bat", "Bottle", "Katana", "Branch", "Spare", "Chain"},
+    Callback = function(choice)
+        for _, tool in getAllTools() do
+            if tool.Name == choice and tool:FindFirstChild("Cooldown") then
+                tool.Cooldown.Value = 0
             end
         end
-    end,
+    end
 })
+
+local autoZero = false
+Human:Toggle({
+    Title = "Auto Zero Cooldown",
+    Value = false,
+    Callback = function(v)
+        autoZero = v
+        task.spawn(function()
+            while autoZero do
+                task.wait()
+                local char = plr.Character
+                if char then
+                    local tool = char:FindFirstChildOfClass("Tool")
+                    if tool and tool:FindFirstChild("Cooldown") then
+                        tool.Cooldown.Value = 0
+                    end
+                end
+            end
+        end)
+    end
+})
+
+local autoLegit = false
+Human:Toggle({
+    Title = "Auto 0.5 Cooldown (looks legit)",
+    Value = false,
+    Callback = function(v)
+        autoLegit = v
+        task.spawn(function()
+            while autoLegit do
+                task.wait()
+                local char = plr.Character
+                if char then
+                    local tool = char:FindFirstChildOfClass("Tool")
+                    if tool and tool:FindFirstChild("Cooldown") then
+                        tool.Cooldown.Value = 0.5
+                    end
+                end
+            end
+        end)
+    end
+})
+
+local killbricksOff = false
+Human:Toggle({
+    Title = "Disable Killbricks",
+    Value = false,
+    Callback = function(v)
+        killbricksOff = v
+        for _, part in workspace.Map:GetDescendants() do
+            if part:IsA("BasePart") and part:FindFirstChild("TouchInterest") and part.Name:lower():find("kill") then
+                part.CanTouch = not v
+                part.CanQuery = not v
+            end
+        end
+    end
+})
+
+Human:Input({
+    Title = "Weapon Reach Size",
+    Placeholder = "number (like 15-30) -- 0 = off",
+    Callback = function(txt)
+        local num = tonumber(txt)
+        if num then
+            savedReachSize = num
+            savedInfectReach = 0 -- Reset chế độ infected khi dùng weapon reach
+            if num > 0 then
+                for _, tool in getAllTools() do
+                    applyReachToTool(tool, savedReachSize)
+                end
+            end
+        end
+    end
+})
+
+local autoReachNew = false
+Human:Toggle({
+    Title = "Auto Reach on New Weapons",
+    Value = false,
+    Callback = function(v)
+        autoReachNew = v
+    end
+})
+
+-- ĐÃ TỐI ƯU: Tự động sửa lỗi mất Reach & mất Khung hiển thị khi hồi sinh hoặc biến hình
+plr.CharacterAdded:Connect(function(char)
+    task.wait(0.6) -- Chờ nhân vật load hoàn chỉnh
+    
+    -- Khôi phục Weapon Reach (nếu đang chơi Human)
+    if savedReachSize > 0 then
+        for _, tool in getAllTools() do
+            applyReachToTool(tool, savedReachSize)
+        end
+    end
+
+    -- Khôi phục Infect Reach 3D (nếu biến hình thành Infected)
+    if savedInfectReach > 0 then
+        applyInfectReach(savedInfectReach)
+    end
+
+    -- Theo dõi khi nhặt thêm vũ khí mới
+    char.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Tool") and (autoReachNew or savedReachSize > 0) then
+            task.wait(0.15)
+            applyReachToTool(obj, savedReachSize)
+        end
+    end)
+end)
+
+plr.Backpack.ChildAdded:Connect(function(obj)
+    if obj:IsA("Tool") and savedReachSize > 0 then
+        task.wait(0.1)
+        applyReachToTool(obj, savedReachSize)
+    end
+end)
+
+Human:Button({
+    Title = "Get Main Weapon",
+    Callback = function()
+        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local oldPos = hrp.CFrame
+        local backpack = plr.Backpack
+
+        local wName = plr.Marketplace["Main Weapon"].Equipped.Value
+        if wName == "Default" then wName = "Bat" end
+
+        repeat task.wait()
+            hrp.CFrame = workspace.Map.HumanBase.Vendor.BatCollection.HitBox.CFrame
+            local detector = workspace.Map.HumanBase.Vendor.BatCollection.ClickDetector
+            detector.MaxActivationDistance = 9e9
+            fireclickdetector(detector)
+        until backpack:FindFirstChild(wName)
+
+        task.wait(0.4)
+        repeat task.wait() hrp.CFrame = oldPos until (hrp.Position - oldPos.Position).Magnitude < 3
+    end
+})
+
+Human:Button({
+    Title = "Get All Special Weapons",
+    Callback = function()
+        local collections = {"FirePotionCollection","ShotgunCollection","KnifeCollection","HatchetCollection","RustyShovelCollection","WaterJugCollection","HandgunCollection","ShovelCollection"}
+        for _, obj in workspace.Map.System:GetDescendants() do
+            if obj:IsA("ClickDetector") and table.find(collections, obj.Parent.Name) and not obj.Parent:FindFirstAncestor("Locker") then
+                local name = obj.Parent.Name:gsub("Collection",""):gsub("(%l)(%u)","%1 %2")
+                local old = plr.Character.HumanoidRootPart.CFrame
+                local start = tick()
+                repeat task.wait()
+                    plr.Character.HumanoidRootPart.CFrame = obj.Parent:FindFirstChildWhichIsA("BasePart").CFrame
+                    fireclickdetector(obj)
+                until plr.Backpack:FindFirstChild(name) or tick() - start > 0.8
+                task.wait(0.1)
+                plr.Character.HumanoidRootPart.CFrame = old
+            end
+        end
+    end
+})
+
+Human:Button({
+    Title = "Delete Current Tool",
+    Callback = function()
+        local tool = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
+        if tool then tool:Destroy() end
+    end
+})
+
+--------------------------------------------------------------------
+-- INFECTED TAB
+--------------------------------------------------------------------
+local Infected = Window:Tab({ Title = "Infected", Icon = "skull" })
+
+Infected:Button({
+    Title = "Infect Yourself",
+    Callback = function()
+        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and workspace.Map.Infectors.Infector and workspace.Map.Infectors.Infector:FindFirstChild("Part") then
+            firetouchinterest(hrp, workspace.Map.Infectors.Infector.Part, 0)
+            task.delay(0.1, function() firetouchinterest(hrp, workspace.Map.Infectors.Infector.Part, 1) end)
+        end
+    end
+})
+
+-- ĐÃ LÀM LẠI: Khối hộp Hitbox 3D trực quan và tự động lưu cấu hình
+Infected:Input({
+    Title = "Infect Reach (Z length)",
+    Placeholder = "how far forward (15-50 good)",
+    Callback = function(val)
+        local n = tonumber(val)
+        if not n then return end
+        
+        savedInfectReach = n
+        savedReachSize = 0 -- Reset chế độ vũ khí khi dùng infected reach
+        applyInfectReach(n)
+    end
+})
+
+Infected:Toggle({
+    Title = "Anti Orange Smilers",
+    Value = false,
+    Callback = function(v)
+        for _, p in workspace:GetDescendants() do
+            if p:IsA("BasePart") and p.BrickColor.Name == "Neon orange" then
+                p.CanTouch = not v
+                p.CanQuery = not v
+            end
+        end
+    end
+})
+
+Infected:Toggle({
+    Title = "Anti White Infect Objects",
+    Value = false,
+    Callback = function(v)
+        for _, p in workspace:GetDescendants() do
+            if p:IsA("BasePart") and p.BrickColor.Name == "Institutional white" then
+                p.CanTouch = not v
+                p.CanQuery = not v
+            end
+        end
+    end
+})
+
+local antiStunRunning = false
+Infected:Toggle({
+    Title = "Anti Stun / Down",
+    Value = false,
+    Callback = function(v)
+        antiStunRunning = v
+        task.spawn(function()
+            while antiStunRunning do
+                task.wait(0.2)
+                pcall(function()
+                    local stats = plr.Character.Stats
+                    if stats.Downed.Value or stats.Ragdoll.Value then
+                        local h = plr.Character.Humanoid
+                        h.WalkSpeed = 20
+                        h:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                        stats.Downed.Value = false
+                        stats.Ragdoll.Value = false
+                    end
+                end)
+            end
+        end)
+    end
+})
+
+Infected:Button({
+    Title = "Zero Grab Cooldown",
+    Callback = function()
+        local inf = plr.Character and plr.Character:FindFirstChild("Infected")
+        if inf and inf:FindFirstChild("Infect") and inf.Infect:FindFirstChild("Cooldown") then
+            inf.Infect.Cooldown.Value = 0
+        end
+    end
+})
+
+--------------------------------------------------------------------
+-- EVENTS / MISC TAB
+--------------------------------------------------------------------
+local EventsMisc = Window:Tab({ Title = "Events / Misc", Icon = "file-text" })
+
+EventsMisc:Toggle({
+    Title = "Auto Grab Keys",
+    Value = false,
+    Callback = function(v)
+        task.spawn(function()
+            while v do
+                task.wait(0.5)
+                for _, k in workspace.Particles:GetChildren() do
+                    if k:IsA("BasePart") and k.Name:lower():find("key") then
+                        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then firetouchinterest(hrp, k, 0) task.delay(0.1, function() firetouchinterest(hrp, k, 1) end) end
+                    end
+                end
+            end
+        end)
+    end
+})
+
+EventsMisc:Toggle({
+    Title = "Auto Grab SmileCoins",
+    Value = false,
+    Callback = function(v)
+        task.spawn(function()
+            while v do
+                task.wait(0.4)
+                for _, c in workspace.Map.System:GetDescendants() do
+                    if c.Name == "SmileCoin" and c:FindFirstChild("TouchInterest") then
+                        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then pcall(function() firetouchinterest(hrp, c, 0) task.delay(0.1, function() firetouchinterest(hrp, c, 1) end) end) end
+                    end
+                end
+            end
+        end)
+    end
+})
+
+local fullbrightOn = false
+EventsMisc:Toggle({
+    Title = "Fullbright",
+    Value = false,
+    Callback = function(enabled)
+        fullbrightOn = enabled
+        local lighting = game.Lighting
+
+        if enabled then
+            lighting.Ambient = Color3.fromRGB(255, 255, 255)
+            lighting.Brightness = 2
+            lighting.FogEnd = 1e10
+
+            for _, effect in lighting:GetDescendants() do
+                if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or 
+                   effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") then
+                    effect.Enabled = false
+                end
+            end
+        else
+            lighting.Ambient = Color3.fromRGB(170, 170, 170)
+            lighting.Brightness = 1
+            lighting.FogEnd = 100000
+        end
+    end
+})
+
+EventsMisc:Button({
+    Title = "No Fog", 
+    Callback = function()
+        local l = game.Lighting
+        l.FogStart = math.huge
+        l.FogEnd = math.huge
+    end
+})
+
+EventsMisc:Button({
+    Title = "Quick Seismic Check", 
+    Callback = function()
+        local cam = workspace.CurrentCamera
+        local old = cam.CFrame
+        cam.CameraType = Enum.CameraType.Scriptable
+        cam.CFrame = CFrame.new(-20,6,-10) * CFrame.Angles(0, math.rad(90),0)
+        task.wait(2.5)
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CFrame = old
+    end
+})
+
+EventsMisc:Toggle({
+    Title = "Anti Black Hole / BodyMovers",
+    Value = false,
+    Callback = function(v)
+        task.spawn(function()
+            while v do
+                task.wait(0.3)
+                if plr.Character then
+                    for _, b in plr.Character:GetDescendants() do
+                        if b:IsA("BodyMover") then b:Destroy() end
+                    end
+                end
+            end
+        end)
+    end
+})
+
+EventsMisc:Toggle({
+    Title = "Kill Nearby NPCs (45 stud)",
+    Value = false,
+    Callback = function(v)
+        task.spawn(function()
+            while v do
+                task.wait(0.5)
+                local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local parts = workspace:GetPartBoundsInRadius(hrp.Position, 45)
+                    for _, p in parts do
+                        if not p.Anchored and not game.Players:GetPlayerFromCharacter(p.Parent) and p.Parent:FindFirstChildOfClass("Humanoid") then
+                            local h = p.Parent:FindFirstChildOfClass("Humanoid")
+                            sethiddenproperty(plr, "SimulationRadius", 1e9)
+                            h.Health = 0
+                        end
+                    end
+                end
+            end
+        end)
+    end
+})
+
+EventsMisc:Toggle({
+    Title = "No Echo/Reverb Sound",
+    Value = false,
+    Callback = function(v)
+        if v then
+            game.SoundService:ResetPropertyToDefault("AmbientReverb")
+        else
+            game.SoundService.AmbientReverb = Enum.ReverbType.Cave
+        end
+    end
+})
+
+EventsMisc:Button({
+    Title = "Spawn EXIT Button",
+    Callback = function()
+        local sg = Instance.new("ScreenGui", game.CoreGui)
+        sg.ResetOnSpawn = false
+
+        local b = Instance.new("TextButton", sg)
+        b.Size = UDim2.new(0,140,0,55)
+        b.Position = UDim2.new(1,-160,0,30)
+        b.BackgroundColor3 = Color3.fromRGB(200,0,0)
+        b.Text = "EXIT"
+        b.TextColor3 = Color3.new(1,1,1)
+        b.Font = Enum.Font.GothamBlack
+        b.TextSize = 30
+
+        local c = Instance.new("UICorner", b) c.CornerRadius = UDim.new(0,10)
+
+        b.MouseButton1Click:Connect(function()
+            plr:Kick("gg")
+            task.wait(0.1)
+            game:Shutdown()
+        end)
+    end
+})
+
+EventsMisc:Button({
+    Title = "Spawn REJOIN Button",
+    Callback = function()
+        local sg = Instance.new("ScreenGui", game.CoreGui)
+        sg.ResetOnSpawn = false
+
+        local b = Instance.new("TextButton", sg)
+        b.Size = UDim2.new(0,140,0,55)
+        b.Position = UDim2.new(1,-160,0,100)
+        b.BackgroundColor3 = Color3.fromRGB(0,120,255)
+        b.Text = "REJOIN"
+        b.TextColor3 = Color3.new(1,1,1)
+        b.Font = Enum.Font.GothamBlack
+        b.TextSize = 30
+
+        local c = Instance.new("UICorner", b) c.CornerRadius = UDim.new(0,10)
+
+        b.MouseButton1Click:Connect(function()
+            game:GetService("TeleportService"):Teleport(game.PlaceId, plr)
+        end)
+    end
+})
+
+--------------------------------------------------------------------
+-- HACKS TAB
+--------------------------------------------------------------------
+local Hacks = Window:Tab({ Title = "Hacks", Icon = "zap" })
+
+local speedVal = 16
+local speedOn = false
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if speedOn and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") then
+            plr.Character.Humanoid.WalkSpeed = speedVal
+        end
+    end
+end)
+
+local noclipOn = false
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if noclipOn and plr.Character then
+            for _, p in plr.Character:GetDescendants() do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end
+    end
+end)
+
+local infJump = false
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if infJump and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") then
+        plr.Character.Humanoid:ChangeState("Jumping")
+    end
+end)
+
+Hacks:Slider({
+    Title = "Walk Speed",
+    Value = {
+        Min = 0,
+        Max = 100,
+        Default = 16,
+    },
+    Callback = function(Value)
+        speedVal = Value
+        speedOn = (Value > 0)
+    end
+})
+
+Hacks:Toggle({
+    Title = "Infinite Jump",
+    Value = false,
+    Callback = function(v) infJump = v end
+})
+
+Hacks:Toggle({
+    Title = "Noclip",
+    Value = false,
+    Callback = function(v) noclipOn = v end
+})
+
+Window:EditOpenButton({
+    Title = "SHOREKEEPER",
+    Enabled = true,
+    Scale = 0.6,
+})
+
+print("SHOREKEEPER Hub Loaded fully!")
+

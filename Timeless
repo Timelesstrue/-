@@ -64,7 +64,7 @@ local function applyReachToTool(tool, size)
     end
 end
 
--- Hàm áp dụng Infect Reach khối hộp 3D cho Infected
+-- Hàm áp dụng Infect Reach khối hộp 3D cho Infected (ĐÃ CHỈNH SỬA VIỀN ĐỎ RÕ HƠN)
 local function applyInfectReach(n)
     if n <= 0 then return end
     local torso = plr.Character and plr.Character:FindFirstChild("Torso")
@@ -86,7 +86,7 @@ local function applyInfectReach(n)
             container.Name = "BeautifulInfectVisual"
             container.Parent = hrp
             
-            -- Tạo khối hộp đặc 3D thay vì tấm phẳng 2D
+            -- Tạo khối hộp đặc 3D
             local box = Instance.new("BoxHandleAdornment")
             box.Name = "VisualBox"
             box.Size = Vector3.new(7, 7, n) -- Chiều dài khối Z phủ hết tầm đánh n
@@ -94,16 +94,17 @@ local function applyInfectReach(n)
             box.AlwaysOnTop = true
             box.ZIndex = 10
             box.Adornee = hrp
-            box.Color3 = Color3.fromRGB(255, 40, 40) 
-            box.Transparency = 0.85 -- Mờ nhẹ dễ nhìn xuyên qua
+            box.Color3 = Color3.fromRGB(255, 0, 0) -- Màu đỏ trong suốt cho ruột hộp
+            box.Transparency = 0.9 -- Rất mờ để không che tầm nhìn
             box.Parent = container
             
-            -- Khung viền 3D bao quanh khối hộp
+            -- CHỈNH SỬA TẠI ĐÂY: Tạo khung viền SelectionBox bao ngoài rõ ràng màu đỏ
             local border = Instance.new("SelectionBox")
             border.Name = "VisualBorder"
-            border.Color3 = Color3.fromRGB(255, 40, 40)
-            border.LineThickness = 0.03
-            border.Adornee = box
+            border.Color3 = Color3.fromRGB(255, 0, 0) -- Màu viền đỏ tươi rực rỡ
+            border.LineThickness = 0.08 -- Độ dày viền (Tăng lên để nhìn cực kỳ rõ nét)
+            border.Transparency = 0 -- Viền đậm, không bị trong suốt
+            border.Adornee = box -- Gắn viền bao bọc lấy khối Hitbox BoxHandleAdornment
             border.Parent = container
         end
     end
@@ -299,10 +300,8 @@ Human:Toggle({
 
 -- SỬA LỖI CORE: Vòng lặp chờ nhân vật tải hoàn toàn để tự khôi phục Reach khi chết/biến hình
 plr.CharacterAdded:Connect(function(char)
-    -- Đợi cho đến khi cấu trúc cơ bản của Nhân vật xuất hiện
     char:WaitForChild("HumanoidRootPart", 5)
     
-    -- Khôi phục Weapon Reach (Nếu là Human)
     if savedReachSize > 0 then
         task.wait(0.5)
         for _, tool in getAllTools() do
@@ -310,11 +309,9 @@ plr.CharacterAdded:Connect(function(char)
         end
     end
 
-    -- Khôi phục Infect Reach (Nếu biến hình thành Infected)
     if savedInfectReach > 0 then
         task.spawn(function()
             local attempts = 0
-            -- Vòng lặp liên tục kiểm tra xem game đã biến bạn thành Infected chưa (khi có Torso.Part)
             repeat 
                 task.wait(0.2)
                 attempts = attempts + 1
@@ -322,11 +319,10 @@ plr.CharacterAdded:Connect(function(char)
                     applyInfectReach(savedInfectReach)
                     break
                 end
-            until attempts > 25 or savedInfectReach == 0 -- Chờ tối đa 5 giây hoặc dừng nếu đổi class
+            until attempts > 25 or savedInfectReach == 0 
         end)
     end
 
-    -- Theo dõi khi nhặt thêm vũ khí mới
     char.DescendantAdded:Connect(function(obj)
         if obj:IsA("Tool") and (autoReachNew or savedReachSize > 0) then
             task.wait(0.15)
@@ -410,7 +406,6 @@ Infected:Button({
     end
 })
 
--- Khối hộp Hitbox 3D trực quan và tự động lưu cấu hình
 Infected:Input({
     Title = "Infect Reach (Z length)",
     Placeholder = "how far forward (15-50 good)",
@@ -419,7 +414,7 @@ Infected:Input({
         if not n then return end
         
         savedInfectReach = n
-        savedReachSize = 0 -- Reset chế độ vũ khí khi dùng infected reach
+        savedReachSize = 0 
         applyInfectReach(n)
     end
 })

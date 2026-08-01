@@ -1,0 +1,238 @@
+-- // Animation Changer - Wind UI Custom
+-- // Tác giả: Nyser#4623 | Cập nhật theo yêu cầu
+
+-- Khởi tạo UI chính
+local AnimationChanger = Instance.new("ScreenGui")
+local Main = Instance.new("Frame")
+local TopBar = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local CloseBtn = Instance.new("TextButton")
+local TabContainer = Instance.new("Frame")
+local TabNormal = Instance.new("TextButton")
+local TabSpecial = Instance.new("TextButton")
+local TabCustom = Instance.new("TextButton")
+local Content = Instance.new("Frame")
+local Scroll = Instance.new("ScrollingFrame")
+local Layout = Instance.new("UIListLayout")
+local ResetBtn = Instance.new("TextButton")
+
+-- Cấu hình UI gốc
+AnimationChanger.Name = "Wind_AnimationChanger"
+AnimationChanger.Parent = game:GetService("CoreGui")
+AnimationChanger.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+AnimationChanger.ResetOnSpawn = false -- GIỮ NGUYÊN KHI HỒI SINH
+
+-- Khung chính - Wind Style
+Main.Name = "MainWindow"
+Main.Parent = AnimationChanger
+Main.BackgroundColor3 = Color3.fromHex("#1A1A1F")
+Main.BackgroundTransparency = 0.1
+Main.BorderSizePixel = 0
+Main.CornerRadius = UDim.new(0, 12)
+Main.Position = UDim2.new(0.5, -180, 0.5, -220)
+Main.Size = UDim2.new(0, 360, 0, 440)
+Main.Active = true
+Main.Draggable = true
+Main.Shadow = Instance.new("UICorner")
+Main.Shadow.CornerRadius = UDim.new(0, 12)
+
+-- Thanh tiêu đề
+TopBar.Parent = Main
+TopBar.BackgroundColor3 = Color3.fromHex("#25252B")
+TopBar.BackgroundTransparency = 0.15
+TopBar.BorderSizePixel = 0
+TopBar.CornerRadius = UDim.new(0, 12)
+TopBar.Position = UDim2.new(0, 0, 0, 0)
+TopBar.Size = UDim2.new(0, 360, 0, 40)
+
+Title.Parent = TopBar
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0, 15, 0, 0)
+Title.Size = UDim2.new(0, 280, 0, 40)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "🎬 Bộ Thay Đổi Hoạt Ảnh"
+Title.TextColor3 = Color3.fromHex("#E0E0E6")
+Title.TextSize = 16
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+CloseBtn.Parent = TopBar
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Position = UDim2.new(0, 320, 0, 0)
+CloseBtn.Size = UDim2.new(0, 40, 0, 40)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.fromHex("#FF5555")
+CloseBtn.TextSize = 22
+CloseBtn.MouseButton1Click:Connect(function()
+    Main:TweenPosition(UDim2.new(0.5, -180, 1.2, -220), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.3)
+    task.wait(0.35)
+    AnimationChanger:Destroy()
+end)
+
+-- Nút khôi phục mặc định
+ResetBtn.Parent = Main
+ResetBtn.BackgroundColor3 = Color3.fromHex("#2C2C33")
+ResetBtn.BackgroundTransparency = 0.2
+ResetBtn.CornerRadius = UDim.new(0, 8)
+ResetBtn.Position = UDim2.new(0, 15, 0, 395)
+ResetBtn.Size = UDim2.new(0, 330, 0, 30)
+ResetBtn.Font = Enum.Font.GothamMedium
+ResetBtn.Text = "🔄 Khôi phục hoạt ảnh mặc định"
+ResetBtn.TextColor3 = Color3.fromHex("#72D8FF")
+ResetBtn.TextSize = 14
+
+-- Tab chuyển danh mục
+TabContainer.Parent = Main
+TabContainer.BackgroundTransparency = 1
+TabContainer.Position = UDim2.new(0, 15, 0, 50)
+TabContainer.Size = UDim2.new(0, 330, 0, 30)
+
+local function createTab(btn, text, pos)
+    btn.Parent = TabContainer
+    btn.BackgroundColor3 = Color3.fromHex("#2C2C33")
+    btn.BackgroundTransparency = 0.2
+    btn.CornerRadius = UDim.new(0, 8)
+    btn.Position = pos
+    btn.Size = UDim2.new(0, 105, 0, 30)
+    btn.Font = Enum.Font.GothamMedium
+    btn.Text = text
+    btn.TextColor3 = Color3.fromHex("#B0B0B8")
+    btn.TextSize = 13
+end
+
+createTab(TabNormal, "Thường Dùng", UDim2.new(0, 0, 0, 0))
+createTab(TabSpecial, "Đặc Biệt", UDim2.new(0, 112, 0, 0))
+createTab(TabCustom, "Tùy Chỉnh", UDim2.new(0, 224, 0, 0))
+
+-- Khu vực nội dung
+Content.Parent = Main
+Content.BackgroundTransparency = 1
+Content.Position = UDim2.new(0, 15, 0, 90)
+Content.Size = UDim2.new(0, 330, 0, 295)
+
+Scroll.Parent = Content
+Scroll.BackgroundTransparency = 1
+Scroll.Size = UDim2.new(1, 0, 1, 0)
+Scroll.ScrollBarThickness = 4
+Scroll.ScrollBarColor3 = Color3.fromHex("#484852")
+
+Layout.Parent = Scroll
+Layout.CellSize = UDim2.new(1, 0, 0, 32)
+Layout.Spacing = UDim.new(0, 6)
+
+-- ==============================
+-- XỬ LÝ HOẠT ẢNH & TÍNH NĂNG
+-- ==============================
+local Player = game:GetService("Players").LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Animate = Character:WaitForChild("Animate")
+local DefaultAnims = {} -- Lưu lại hoạt ảnh gốc để khôi phục
+
+-- Lưu trạng thái mặc định khi khởi động
+for _, track in pairs({"idle", "walk", "run", "jump", "climb", "fall", "swim", "swimidle"}) do
+    local anim = Animate:FindFirstChild(track)
+    if anim then
+        if track == "idle" then
+            DefaultAnims.idle1 = anim.Animation1.AnimationId
+            DefaultAnims.idle2 = anim.Animation2.AnimationId
+        else
+            DefaultAnims[track] = anim:FindFirstChildOfClass("Animation").AnimationId
+        end
+    end
+end
+
+-- Tự động áp dụng lại khi hồi sinh
+Player.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    task.wait(1)
+    Animate = Character:WaitForChild("Animate")
+    -- Nếu đang có hoạt ảnh tùy chỉnh, giữ nguyên
+    if _G.CurrentAnims then
+        applyAnimSet(_G.CurrentAnims)
+    end
+end)
+
+-- Hàm áp dụng bộ hoạt ảnh
+function applyAnimSet(list)
+    if list.idle1 then Animate.idle.Animation1.AnimationId = list.idle1 end
+    if list.idle2 then Animate.idle.Animation2.AnimationId = list.idle2 end
+    if list.walk then Animate.walk.WalkAnim.AnimationId = list.walk end
+    if list.run then Animate.run.RunAnim.AnimationId = list.run end
+    if list.jump then Animate.jump.JumpAnim.AnimationId = list.jump end
+    if list.climb then Animate.climb.ClimbAnim.AnimationId = list.climb end
+    if list.fall then Animate.fall.FallAnim.AnimationId = list.fall end
+    if list.swim then Animate.swim.Swim.AnimationId = list.swim end
+    if list.swimidle then Animate.swimidle.SwimIdle.AnimationId = list.swimidle end
+    _G.CurrentAnims = list -- Lưu lại để giữ khi respawn
+    Character.Humanoid.Jump = true -- Làm mới hoạt ảnh
+end
+
+-- Hàm tạo nút chọn hoạt ảnh
+local function addAnimBtn(name, animList)
+    local btn = Instance.new("TextButton")
+    btn.BackgroundColor3 = Color3.fromHex("#2C2C33")
+    btn.BackgroundTransparency = 0.2
+    btn.CornerRadius = UDim.new(0, 8)
+    btn.Font = Enum.Font.GothamMedium
+    btn.Text = "• "..name
+    btn.TextColor3 = Color3.fromHex("#E0E0E6")
+    btn.TextSize = 14
+    btn.MouseButton1Click:Connect(function() applyAnimSet(animList) end)
+    btn.Parent = Scroll
+end
+
+-- Nút khôi phục mặc định
+ResetBtn.MouseButton1Click:Connect(function()
+    applyAnimSet(DefaultAnims)
+    _G.CurrentAnims = nil
+end)
+
+-- ==============================
+-- DANH SÁCH HOẠT ẢNH HỢP LỆ
+-- ==============================
+-- Tab Thường Dùng
+addAnimBtn("Ninja", {
+    idle1 = "rbxassetid://656117400", idle2 = "rbxassetid://656118341",
+    walk = "rbxassetid://656121766", run = "rbxassetid://656118852",
+    jump = "rbxassetid://656117878", climb = "rbxassetid://656114359",
+    fall = "rbxassetid://656115606"
+})
+addAnimBtn("Knight", {
+    idle1 = "rbxassetid://657595757", idle2 = "rbxassetid://657568135",
+    walk = "rbxassetid://657552124", run = "rbxassetid://657564596",
+    jump = "rbxassetid://658409194", climb = "rbxassetid://658360781",
+    fall = "rbxassetid://657600338"
+})
+addAnimBtn("Bubbly", {
+    idle1 = "rbxassetid://910004836", idle2 = "rbxassetid://910009958",
+    walk = "rbxassetid://910034870", run = "rbxassetid://910025107",
+    jump = "rbxassetid://910016857", fall = "rbxassetid://910001910",
+    swimidle = "rbxassetid://910030921", swim = "rbxassetid://910028158"
+})
+
+-- Tab Đặc Biệt
+addAnimBtn("Cowboy", {
+    idle1 = "rbxassetid://1014390418", idle2 = "rbxassetid://1014398616",
+    walk = "rbxassetid://1014421541", run = "rbxassetid://1014401683",
+    jump = "rbxassetid://1014394726", climb = "rbxassetid://1014380606",
+    fall = "rbxassetid://1014384571"
+})
+addAnimBtn("Princess", {
+    idle1 = "rbxassetid://941003647", idle2 = "rbxassetid://941013098",
+    walk = "rbxassetid://941028902", run = "rbxassetid://941015281",
+    jump = "rbxassetid://941008832", climb = "rbxassetid://940996062",
+    fall = "rbxassetid://941000007"
+})
+
+-- Tab Tùy Chỉnh Riêng Lẻ (bạn có thể thêm ID riêng)
+local customNote = Instance.new("TextLabel")
+customNote.BackgroundTransparency = 1
+customNote.Font = Enum.Font.GothamMedium
+customNote.Text = "🔧 Nhập ID hoạt ảnh riêng vào code để dùng"
+customNote.TextColor3 = Color3.fromHex("#888892")
+customNote.TextSize = 13
+customNote.Parent = Scroll
+
+-- Hiện thị UI với hiệu ứng
+task.wait(0.5)
+Main:TweenPosition(UDim2.new(0.5, -180, 0.5, -220), Enum.EasingDirection.Out, Enum.EasingStyle.Back, 0.4)
